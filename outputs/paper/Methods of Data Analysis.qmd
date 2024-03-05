@@ -1,0 +1,340 @@
+---
+title: "EDA of Airbnb Paris"
+format: pdf
+editor: visual
+author:  
+   - Junwei Chen
+bibliography: references.bib
+toc: true
+execute: 
+  cache: true
+  warning: false
+---
+
+# Loading the necessary library
+
+Libraries like Janitor [@jnaitor], Knitr [@knitr], Lubridate [@lubridate], Naniar [@naniar] and Tidyverse [@tidyverse] have been used to conduct the EDA on the Airbnb data for Paris.
+
+```{r}
+library(janitor)
+library(knitr)
+library(lubridate)
+library(naniar)
+library(tidyverse)
+```
+
+# Loading the data
+
+Using the link of the data-set and storing it in data-frame named "airbnb_data"
+
+```{r}
+url <-
+  paste0(
+    "http://data.insideairbnb.com/france/ile-de-france/paris/2023-12-12/data/listings.csv.gz"
+  )
+
+airbnb_data <-
+  read_csv(
+    file = url,
+    guess_max = 20000
+  )
+
+# getting the dataset in csv format
+write_csv(airbnb_data, "airbnb_data.csv")
+
+
+airbnb_data
+```
+
+## Sub-setting the data
+
+```{r}
+# Choosing relevant fields from the dataset
+airbnb_data_selected <-
+  airbnb_data |>
+  select(
+    host_id,
+    host_response_time,
+    host_is_superhost,
+    host_total_listings_count,
+    neighbourhood_cleansed,
+    bathrooms,
+    bedrooms,
+    price,
+    number_of_reviews,
+    review_scores_rating,
+    review_scores_accuracy,
+    review_scores_value
+  )
+```
+
+```{r}
+# Producing frist few contents from the price column
+airbnb_data_selected$price |>
+  head()
+```
+
+```{r}
+# Selecting only those prices which has ',' (comma) i.e. more than 3 digits
+airbnb_data_selected |>
+  select(price) |>
+  filter(str_detect(price, ","))
+```
+
+```{r}
+# Converting all data points of price column into integer
+airbnb_data_selected <-
+  airbnb_data_selected |>
+  mutate(
+    price = str_remove_all(price, "[\\$,]"),
+    price = as.integer(price)
+  )
+```
+
+# Visual EDA
+
+## Based on Price
+
+Figure 1 shows the number of properties across differerent ranges. It shows a large concentration of properties at the lower end of the price scale. It shows a sharp decline as the price increases, which is indicative that most of the properties are priced at the lower end of the range. However, the exact distribution is difficult to decipher because of the scaling issues.
+
+Figure 2 shows the histogram similar to the Figure 1 but with an added scaling on logarithmic scale. It filters out properties priced at 1000 units or less. Logarithmic transformation or scaling is a general technique used when data spans have variable orders of magnitude. This allows for a visual representation where the distribution of higher priced properties are more clearly visible. The scaling helped in dealing with the skewness of the data towards lower prices and provided a better visualization of the distribution.
+
+```{r}
+# Plotting the histogram for price
+airbnb_data_selected |>
+  ggplot(aes(x = price)) +
+  geom_histogram(binwidth = 10) +
+  theme_classic() +
+  labs(title = "Figure 1: Price per night",
+    x = "Price per night",
+    y = "Number of properties" 
+  )
+
+# Plotting histogram by scaling the data points on log scale 
+airbnb_data_selected |>
+  filter(price > 1000) |>
+  ggplot(aes(x = price)) +
+  geom_histogram(binwidth = 10) +
+  theme_classic() +
+  labs(title = "Figure 2: Price per night after scaling on log",
+    x = "Price per night",
+    y = "Number of properties"
+  ) +
+  scale_y_log10()
+```
+
+Figure 3 shows a histogram histogram for the property price distribution less than \$1000. It can be seen than the number of properties decreases with the increase in price suggesting that the properties in lower range of price are in more abundance. Figure 4 shows histogram of the filtered data for fetching results between \$90 and \$210 per night. This filter helps narrow down the search results of the lower spectrum as seen in Figure 1. It zooms in on a specific range to provide a detailed view of pricing patterns.
+
+```{r}
+airbnb_data_selected |>
+  filter(price < 1000) |>
+  ggplot(aes(x = price)) +
+  geom_histogram(binwidth = 10) +
+  theme_classic() +
+  labs(title = "Figure 3: Histogram for prices less than $1000",
+    x = "Price per night",
+    y = "Number of properties"
+  )
+
+airbnb_data_selected |>
+  filter(price > 90) |>
+  filter(price < 210) |>
+  ggplot(aes(x = price)) +
+  geom_histogram(binwidth = 1) +
+  theme_classic() +
+  labs(title = "Figure 4: Histogram for prices between $90 and $210",
+    x = "Price per night",
+    y = "Number of properties"
+  )
+```
+
+## Based on Scores
+
+```{r}
+# Filtering for less than 1000
+airbnb_data_less_1000 <-
+  airbnb_data_selected |>
+  filter(price < 1000)
+```
+
+```{r}
+airbnb_data_less_1000 |>
+  filter(is.na(host_is_superhost))
+```
+
+```{r}
+# Adding additional column to add information for hosts
+airbnb_data_no_superhost_nas <-
+  airbnb_data_less_1000 |>
+  filter(!is.na(host_is_superhost)) |>
+  mutate(
+    host_is_superhost_binary =
+      as.numeric(host_is_superhost)
+  )
+```
+
+Figure 5 suggests that there are high frequency of properties with a score of around 5, indicating that the customers are generally satisfied. This shows that properties in Paris are generally built well and leaves a satisfactory impression on the customers.
+
+```{r}
+# Creating bar plot to show the distibution of review scores
+airbnb_data_no_superhost_nas |>
+  ggplot(aes(x = review_scores_rating)) +
+  geom_bar() +
+  theme_classic() +
+  labs(title = "Figure 5: Distribution of scores",
+    x = "Review scores rating",
+    y = "Number of properties"
+  )
+```
+
+It can be seen that there are 13,497 properties in the data-set that do not have a super-host status and indicates that there are missing review score ratings. This can be common for new listings or for those listings which have been dormant or inactive for a long time. It is important to note that these missing reviews are not the case of missing data, but a case where certain properties have not been reviewed by any customer. These large number of listings without an review can be a matter of concern for Airbnb Paris as it indicates that large number of properties have either been iactive or not famous enough to get a review.
+
+```{r}
+# Calculating number of rows which has missing score ratings
+airbnb_data_no_superhost_nas |>
+  filter(is.na(review_scores_rating)) |>
+  nrow()
+```
+
+```{r}
+# Creating a table to show frequency of each unique value
+airbnb_data_no_superhost_nas |>
+  filter(is.na(review_scores_rating)) |>
+  select(number_of_reviews) |>
+  table()
+```
+
+Figure 6 shows the histogram for the average review scores with a bin width of 1. The plot can be seen to have the majority of the scores at 4 or higher. This suggests that the properties generally have a satisfactory and favorable reviews.
+
+```{r}
+# Plotting histogram plot showing the distribution of review scores
+airbnb_data_no_superhost_nas |>
+  filter(!is.na(review_scores_rating)) |>
+  ggplot(aes(x = review_scores_rating)) +
+  geom_histogram(binwidth = 1) +
+  theme_classic() +
+  labs(title = "Figure 6: Distribution of average review score ",
+    x = "Average review score",
+    y = "Number of properties"
+  )
+```
+
+```{r}
+# Filtering where ratings are available
+airbnb_data_has_reviews <-
+  airbnb_data_no_superhost_nas |>
+  filter(!is.na(review_scores_rating))
+```
+
+The majority of hosts respond within an hour, amounting to 22,094, while there are notable number of listings where the response time is not available, amounting to 16,531.
+
+```{r}
+# Creating table for different response time counts
+airbnb_data_has_reviews |>
+  count(host_response_time)
+```
+
+```{r}
+# Updating the host response time in main data frame
+airbnb_data_has_reviews <-
+  airbnb_data_has_reviews |>
+  mutate(
+    host_response_time = if_else(
+      host_response_time == "N/A",
+      NA_character_,
+      host_response_time
+    ),
+    host_response_time = factor(host_response_time)
+  )
+```
+
+## Based on Review Scores and Response Time
+
+Figure 7 illustrates the relationship between the response of a host's time and the properties review score. Most of the data points in the scatter plot consists of an available review score indicated by blue color. The plot shows that most of the hosts respond in a few hours to max within a day. It also shows that most properties are having high review score.
+
+```{r}
+# Plot to show the relationship between response time of hosts and accuracy scores
+airbnb_data_has_reviews |>
+  ggplot(aes(
+    x = host_response_time,
+    y = review_scores_accuracy
+  )) +
+  geom_miss_point() +
+  labs(title = "Figure 7: Response time vs score",
+    x = "Host response time",
+    y = "Review score accuracy",
+    color = "Is missing?"
+  ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+# Filtering data and showing only thsoe data points where host repsponse time is present
+airbnb_data_selected <-
+  airbnb_data_has_reviews |>
+  filter(!is.na(host_response_time))
+```
+
+```{r}
+# Filtering the data based on listong counts more than 500
+airbnb_data_selected |>
+  filter(host_total_listings_count >= 500) |>
+  head()
+```
+
+## Based on Price and Review Score
+
+```{r}
+# Filtering data where hist id occurs exactly once
+airbnb_data_selected <-
+  airbnb_data_selected |>
+  add_count(host_id) |>
+  filter(n == 1) |>
+  select(-n)
+#
+```
+
+Figure 8 shows a scatter plot encompassing the relationship between average score and price per night. The super host listings are seen to be clustered generally at the higher end of the review score range. This indicates that the super hosts are generally receiving higher scores. The concentration of points at lower prices are very dense, indicating more availability of affordable listings with a wide range of review scores.
+
+```{r}
+# Plotting the superhosts and the review counts to show relationship between price and average review scores
+airbnb_data_selected |>
+  filter(number_of_reviews > 1) |>
+  ggplot(aes(x = price, y = review_scores_rating, 
+             color = host_is_superhost)) +
+  geom_point(size = 1, alpha = 0.1) +
+  theme_classic() +
+  labs(title = "Figure 8: Relationship between price and average score",
+    x = "Price per night",
+    y = "Average review score",
+    color = "Superhost"
+  ) +
+  scale_color_brewer(palette = "Set1")
+```
+
+About 28% of the listings are comprised of super hosts which is a substantial proportion and can indicate an impression of quality services.
+
+```{r}
+# Showing proportions of unique values of superhosts
+airbnb_data_selected |>
+  count(host_is_superhost) |>
+  mutate(
+    proportion = n / sum(n),
+    proportion = round(proportion, digits = 2)
+  )
+```
+
+The neighborhood distribution shows that the listings are maximum in Buttes-Montmartre area with a 12.9% density. It is followed by 10% proportion of Popincourt, and so on.
+
+```{r}
+# Showing the percentage of unique occurence of values for neighborhood
+airbnb_data_selected |>
+  tabyl(neighbourhood_cleansed) |>
+  adorn_pct_formatting() |>
+  arrange(-n) |>
+  filter(n > 100) |>
+  adorn_totals("row") |>
+  head()
+```
+
+# References
